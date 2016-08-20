@@ -5,7 +5,7 @@ Reporistory for abnormal python a/b testing script
 
 Example of using the script to identify new js variables by using N number of proxies:
 
-```ruby
+```shell
 
 ubuntu@XXXXXX:~/abnormal$ python abnormal.py 
 Got 20 proxies from cyber syndrome
