@@ -7,6 +7,7 @@ import time
 import re
 from time import sleep
 import requests
+import logging
 
 output = []
 count = 0
@@ -62,7 +63,7 @@ class ThreadUrl(threading.Thread):
             global output
             count = count + 1
             if (count % 100 == 0):
-                print "Processed %s proxies" % count
+                logging.info("Processed %s proxies" % count)
 
             try:
                 proxy_handler = urllib2.ProxyHandler({'https':proxy_info})
@@ -89,7 +90,7 @@ def check_proxies(threads, proxies_amount):
         t.start()
 
     proxies = from_cyber_syndrome()[:proxies_amount*4]
-    print "Got %s proxies from cyber syndrome" % len(proxies)
+    logging.info("Got %s proxies from cyber syndrome" % len(proxies))
 
     proxies = list(set(proxies))
 
@@ -98,5 +99,5 @@ def check_proxies(threads, proxies_amount):
 
     #wait on the queue until everything has been processed     
     queue.join()
-    print "Got %s working proxies" % len(output[:proxies_amount])
+    logging.info("Got %s working proxies" % len(output[:proxies_amount]))
     return output

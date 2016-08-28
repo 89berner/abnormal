@@ -54,7 +54,7 @@ class Target:
             count = count + status
             if count == self.max_ips:
                 break
-        print "Got %s working observers" % count
+        logging.info("Got %s working observers" % count)
         
         compared = AutoVivification()
         for url in self.urls:

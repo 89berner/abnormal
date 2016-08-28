@@ -17,8 +17,8 @@ from abnormal import Target
 from abnormal import Observer
 from abnormal import Address
 
+#Set up logging
 import logging
-
 parser = OptionParser()
 parser.add_option("-u", "--url", dest="url",
                   help="Url to use", metavar="FILE")
@@ -31,17 +31,19 @@ parser.add_option("-t", "--threads", type="int",
 parser.add_option("-p", "--proxies", type="int",
                   dest="n_proxies", default=5,
                   help="Amount of proxies to use")
-parser.add_option("-l", "--log",
-                  dest="loglevel", default="INFO",
+parser.add_option("-l", "--log", default="WARNING",
+                  dest="loglevel",
                   help="Log level")
+parser.add_option("-m", "--max", type="int",
+                  dest="max_ips", default=20,
+                  help="Max amount of proxies to use")
+parser.add_option("-m", "--urls",
+                  dest="urls",
+                  help="File of urls to process")
 (options, args) = parser.parse_args()
 
 if not options.url:   # if filename is not given
     parser.error('A url was not given')
-
-pp = pprint.PrettyPrinter(indent=4)
-
-urls = [ options.url ]
 
 numeric_level = getattr(logging, options.loglevel.upper(), None)
 if not isinstance(numeric_level, int):
@@ -49,9 +51,17 @@ if not isinstance(numeric_level, int):
 logging.basicConfig(level=numeric_level)
 logging.getLogger("requests").setLevel(logging.WARNING)
 
+#Start
+urls = []
+if not urls in options:
+    urls = [ options.url ]
+else:
+    #open file
+    pass
+
 working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
 ab = AB(working_proxies)
 ab.targets = []
-ab.add_target("Instagram",urls,20)
+ab.add_target(options.url,urls,options.max_ips)
 ab.process()
 ab.report()
