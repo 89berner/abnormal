@@ -1,5 +1,5 @@
 # abnormal
-Reporistory for abnormal python a/b testing script
+Abnormal python a/b testing script
 
 *** This scripts are on a testing phase, use at your own peril ***
 
