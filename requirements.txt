@@ -1,3 +1,5 @@
+traceback
 BeautifulSoup
 lxml
 requests
+tabulate

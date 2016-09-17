@@ -81,6 +81,14 @@ class ThreadUrl(threading.Thread):
                 pass
             self.queue.task_done()
 
+def get_proxies():
+
+    proxies = from_cyber_syndrome()
+    logging.info("Got %s proxies from cyber syndrome" % len(proxies))
+
+    return proxies
+
+
 def check_proxies(threads, proxies_amount):
     queue = Queue.Queue()
 

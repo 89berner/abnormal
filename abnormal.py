@@ -21,7 +21,7 @@ from abnormal import Address
 import logging
 parser = OptionParser()
 parser.add_option("-u", "--url", dest="url",
-                  help="Url to use", metavar="FILE")
+                  help="Url to use")
 parser.add_option("-q", "--quiet",
                   action="store_false", dest="verbose", default=True,
                   help="don't print status messages to stdout")
@@ -34,11 +34,8 @@ parser.add_option("-p", "--proxies", type="int",
 parser.add_option("-l", "--log", default="WARNING",
                   dest="loglevel",
                   help="Log level")
-parser.add_option("-m", "--max", type="int",
-                  dest="max_ips", default=20,
-                  help="Max amount of proxies to use")
-parser.add_option("-m", "--urls",
-                  dest="urls",
+parser.add_option("-f", "--file",
+                  dest="url_file",
                   help="File of urls to process")
 (options, args) = parser.parse_args()
 
@@ -50,18 +47,20 @@ if not isinstance(numeric_level, int):
     raise ValueError('Invalid log level: %s' % options.loglevel)
 logging.basicConfig(level=numeric_level)
 logging.getLogger("requests").setLevel(logging.WARNING)
-
+requests.packages.urllib3.disable_warnings()
 #Start
 urls = []
-if not urls in options:
+if options.url:
     urls = [ options.url ]
 else:
     #open file
     pass
 
-working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
+working_proxies = proxies.get_proxies()
+#working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
+
 ab = AB(working_proxies)
 ab.targets = []
-ab.add_target(options.url,urls,options.max_ips)
+ab.add_target(options.url,urls,options.n_proxies, options.n_threads)
 ab.process()
 ab.report()

@@ -1,20 +1,46 @@
+import sys
+import traceback
 import requests
 from AutoVivification import AutoVivification
 from BeautifulSoup import BeautifulSoup
 from sets import Set
+import Queue
+import threading
 
 import re
 import json
-
 import logging
+from Result import Result
+
+class ThreadProcessTarget(threading.Thread):
+    """Threaded Url Grab"""
+    def __init__(self, queue, working_observers, max_ips):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.working_observers = working_observers
+        self.max_ips = max_ips
+
+    def run(self):
+        while True:
+            observer = self.queue.get()
+            if len(self.working_observers) < self.max_ips:
+                status = observer.request()
+                if (status == 1): #Working observers
+                    self.working_observers.append(observer)
+                    logging.debug("Count is now %s of %s" % (len(self.working_observers), self.max_ips) )
+                else:
+                    #logging.debug("Observer %s failed" % observer.ip)
+                    pass
+            self.queue.task_done()
+
 
 class AB:
     def __init__(self, proxies):
         self.targets = []
         self.observer_list = proxies
         
-    def add_target(self,name,urls,max_ips):
-        target = Target(name,urls,self.observer_list,max_ips)
+    def add_target(self,name,urls,max_ips, max_threads):
+        target = Target(name,urls,self.observer_list,max_ips, max_threads)
         self.targets.append(target)
         
     def process(self):
@@ -26,42 +52,53 @@ class AB:
         for target in self.targets:
             target.report()
             print "-" * 50
-    
+
 class Target:
-    def __init__(self, name, urls, ip_list, max_ips):
+    def __init__(self, name, urls, ip_list, max_ips, max_threads):
         self.urls = urls
-        self.possible_observers = []
-        self.observers = []
-        for ip in ip_list:
-            self.possible_observers.append(Observer(ip,urls))
+        self.max_threads = max_threads
         self.name    = name
         self.max_ips = max_ips
+
+        self.possible_observers = []
+        for ip in ip_list:
+            self.possible_observers.append(Observer(ip,urls))
+
         self.diff_vars    = {}
         self.missing_vars = {}
         for url in urls:
             self.diff_vars[url] = Set()
             self.missing_vars[url] = Set()
-        self.compared_results = AutoVivification()
+
+        #Set instance variables
+        self.observers    = []
+        self.results = Result(name, urls)
 
     def process(self):
-        count = 0
+        #Move to multi threading
+        working_observers = []
+        queue = Queue.Queue()
+        for i in range(self.max_threads):
+            t = ThreadProcessTarget(queue,working_observers,self.max_ips)
+            t.setDaemon(True)
+            t.start()
+
         for observer in self.possible_observers:
-            status = observer.request()
-            
-            if (status == 1): #Working observers
-                self.observers.append(observer)
-            
-            count = count + status
-            if count == self.max_ips:
-                break
-        logging.info("Got %s working observers" % count)
+            queue.put(observer)
+
+        queue.join()
+        self.observers = working_observers[:self.max_ips]
+        logging.info("Got %s working observers" % len(working_observers))
         
-        compared = AutoVivification()
+        #For each url match observer by observer and see
+        #what variables are missing or different
         for url in self.urls:
             for observer1 in self.observers:
                 for observer2 in self.observers:
                     if (observer1.ip != observer2.ip):
                         self.check_vars(observer1,observer2,url)
+
+            #Per type of check, count and append occurances 
             self.compare(url)
             break
                         
@@ -69,6 +106,7 @@ class Target:
         logging.debug('Checking vars between %s-%s for %s' % (observer1.ip,observer2.ip,url))
         vars1 = observer1.get_address(url).vars
         vars2 = observer2.get_address(url).vars
+
         for var in vars1:
             logging.debug('Comparing for %s %s' % (var,vars1[var]))
             if (var not in vars2):
@@ -78,29 +116,30 @@ class Target:
                 
     def compare(self,url):
         logging.debug('Doing compare for %s' % url)
+
+        url_results = self.results.get(url)
+        #Looking for missing js variables
         for missing in self.missing_vars[url]:
             logging.debug('Looking for %s' % missing)
-            self.compared_results[url]['missing_vars'][missing] = 0
             for observer in self.observers:
                 addr = observer.get_address(url)
                 if missing not in addr.vars:
                     logging.debug("%s is missing" % missing)
-                    self.compared_results[url]['missing_vars'][missing] += 1
+                    url_results.set_missing_var(missing)
+
+        #Looking for differences in js variables
         for diff_var in self.diff_vars[url]:
             logging.debug('Comparing %s' % diff_var)
-            self.compared_results[url]['diff_vars'][diff_var] = Set()
             for observer in self.observers:
                 addr = observer.get_address(url)
                 if diff_var in addr.vars:
-                    self.compared_results[url]['diff_vars'][diff_var].add(addr.vars[diff_var])
+                    var_value = addr.vars[diff_var]
+                    url_results.set_diff_var(diff_var,var_value)
 
     def report(self):
         print "Report for %s" % self.name
-        for url in self.compared_results:
-            print "For %s" % url
-            for val in self.compared_results[url]:
-                print "%s: %s" % (val,self.compared_results[url][val])
-        
+        for url in self.urls:
+            results = self.results.print_table(url)        
         
 class Observer:
     def __init__(self, ip, urls):
@@ -123,7 +162,7 @@ class Observer:
         try:
             r = self.session.get(url, proxies=proxies, verify=False, timeout=5)
         except Exception as e:
-            #print traceback.format_exception(*sys.exc_info())
+            #logging.debug(traceback.format_exception(*sys.exc_info()))
             return 0
         address = Address(url,r.content)
         self.address_map[url] = address
