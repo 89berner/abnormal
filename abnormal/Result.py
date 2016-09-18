@@ -13,14 +13,18 @@ class Result:
     def get_array(self, url):
         return self.urls[url].as_array()
 
+    def report(self):
+        for url in self.urls:
+            self.print_table(url)
+
     def print_table(self, url):
         diff_results = self.urls[url].get_results_map()
         for check in diff_results:
-            print "\nCheck %s:\n" % check
+            print "\n(%s) %s:\n" % (check, diff_results[check]['description'])
             columns = diff_results[check]['columns']
             results = diff_results[check]['results']
+            
             print tabulate(results, headers=columns)
-        #print tabulate(results, headers=['Check name', 'Variable Name', 'Result'])
 
 class UrlResult:
     def __init__(self, url):
@@ -45,12 +49,14 @@ class UrlResult:
         results = {}
 
         results['missing_vars'] = {}
+        results['missing_vars']['description'] = "Variables missing for some observers"
         results['missing_vars']['results'] = []
         results['missing_vars']['columns'] = ['Variable Name', 'Amount']
         for var in self.missing_vars:
             results['missing_vars']['results'].append([var, self.missing_vars[var]])
 
         results['diff_vars'] = {}
+        results['diff_vars']['description'] = "Variables and their optional values for some observers"
         results['diff_vars']['results'] = []
         results['diff_vars']['columns'] = ['Variable Name', 'Possible value', 'Amount']
         blacklisted_vars = ['config-csrf_token','country_code']

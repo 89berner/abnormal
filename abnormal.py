@@ -37,6 +37,9 @@ parser.add_option("-l", "--log", default="WARNING",
 parser.add_option("-f", "--file",
                   dest="url_file",
                   help="File of urls to process")
+parser.add_option("-d", "--debug",
+                  dest="debug", default=0,
+                  help="Debug mode")
 (options, args) = parser.parse_args()
 
 if not options.url:   # if filename is not given
@@ -60,7 +63,6 @@ working_proxies = proxies.get_proxies()
 #working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
 
 ab = AB(working_proxies)
-ab.targets = []
-ab.add_target(options.url,urls,options.n_proxies, options.n_threads)
+ab.add_target(options.url,urls,options.n_proxies, options.n_threads, options.debug)
 ab.process()
 ab.report()

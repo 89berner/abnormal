@@ -3,3 +3,4 @@ BeautifulSoup
 lxml
 requests
 tabulate
+selenium

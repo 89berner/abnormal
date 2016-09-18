@@ -1,16 +1,23 @@
 import sys
+import os
 import traceback
 import requests
-from AutoVivification import AutoVivification
-from BeautifulSoup import BeautifulSoup
 from sets import Set
 import Queue
 import threading
-
 import re
 import json
 import logging
+from selenium import webdriver
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+
+#Reduce logging for selenium
+from selenium.webdriver.remote.remote_connection import LOGGER
+LOGGER.setLevel(logging.WARNING)
+
 from Result import Result
+from Address import Address
+from AutoVivification import AutoVivification
 
 class ThreadProcessTarget(threading.Thread):
     """Threaded Url Grab"""
@@ -27,20 +34,23 @@ class ThreadProcessTarget(threading.Thread):
                 status = observer.request()
                 if (status == 1): #Working observers
                     self.working_observers.append(observer)
+                    try:
+                        observer.take_screenshots()
+                    except:
+                        pass
                     logging.debug("Count is now %s of %s" % (len(self.working_observers), self.max_ips) )
                 else:
                     #logging.debug("Observer %s failed" % observer.ip)
                     pass
             self.queue.task_done()
 
-
 class AB:
     def __init__(self, proxies):
         self.targets = []
         self.observer_list = proxies
         
-    def add_target(self,name,urls,max_ips, max_threads):
-        target = Target(name,urls,self.observer_list,max_ips, max_threads)
+    def add_target(self,name,urls,max_ips, max_threads, debug):
+        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug)
         self.targets.append(target)
         
     def process(self):
@@ -54,7 +64,7 @@ class AB:
             print "-" * 50
 
 class Target:
-    def __init__(self, name, urls, ip_list, max_ips, max_threads):
+    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug):
         self.urls = urls
         self.max_threads = max_threads
         self.name    = name
@@ -62,7 +72,7 @@ class Target:
 
         self.possible_observers = []
         for ip in ip_list:
-            self.possible_observers.append(Observer(ip,urls))
+            self.possible_observers.append(Observer(ip,urls,debug))
 
         self.diff_vars    = {}
         self.missing_vars = {}
@@ -75,7 +85,30 @@ class Target:
         self.results = Result(name, urls)
 
     def process(self):
-        #Move to multi threading
+        
+        #Get observers to use
+        self.get_working_observers()
+
+        #Check the difference between observers
+        self.analyze_observers()
+
+        #Compare observers        
+        self.compare_observers()
+
+    def analyze_observers(self):
+        #For each url match observer by observer and see
+        #what variables are missing or different
+        for url in self.urls:
+            for observer1 in self.observers:
+                for observer2 in self.observers:
+                    if (observer1.ip != observer2.ip):
+                        self.check_vars(observer1,observer2,url)
+
+    def compare_observers(self):
+        for url in self.urls:
+            self.compare(url)
+
+    def get_working_observers(self):
         working_observers = []
         queue = Queue.Queue()
         for i in range(self.max_threads):
@@ -87,21 +120,9 @@ class Target:
             queue.put(observer)
 
         queue.join()
-        self.observers = working_observers[:self.max_ips]
         logging.info("Got %s working observers" % len(working_observers))
-        
-        #For each url match observer by observer and see
-        #what variables are missing or different
-        for url in self.urls:
-            for observer1 in self.observers:
-                for observer2 in self.observers:
-                    if (observer1.ip != observer2.ip):
-                        self.check_vars(observer1,observer2,url)
+        self.observers = working_observers[:self.max_ips]
 
-            #Per type of check, count and append occurances 
-            self.compare(url)
-            break
-                        
     def check_vars(self,observer1,observer2,url):
         logging.debug('Checking vars between %s-%s for %s' % (observer1.ip,observer2.ip,url))
         vars1 = observer1.get_address(url).vars
@@ -138,15 +159,15 @@ class Target:
 
     def report(self):
         print "Report for %s" % self.name
-        for url in self.urls:
-            results = self.results.print_table(url)        
+        self.results.report()      
         
 class Observer:
-    def __init__(self, ip, urls):
+    def __init__(self, ip, urls, debug):
         self.ip = ip
         self.urls = urls
         self.address_map = {}
         self.session = requests.Session()
+        self.debug = debug
         
     def request(self):
         status = 0
@@ -166,8 +187,31 @@ class Observer:
             return 0
         address = Address(url,r.content)
         self.address_map[url] = address
+        if (self.debug):
+            f = open("tmp/%s-%s.txt" % (url.replace("/",""), self.ip ), 'w')
+            f.write(r.content)
         return 1
-    
+
+    def take_screenshots(self):
+        for url in self.urls:
+            self.take_screenshot(url)
+
+    def take_screenshot(self,url):
+        max_wait = 60
+        dcap = dict(DesiredCapabilities.PHANTOMJS)
+        dcap["phantomjs.page.settings.userAgent"] = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.89 Safari/537.36"
+        )
+
+        driver = webdriver.PhantomJS(service_log_path=os.path.devnull, desired_capabilities=dcap, service_args=["--proxy=%s" % self.ip, '--ignore-ssl-errors=true', '--ssl-protocol=any'])
+        driver.set_window_size(1280,800)
+        driver.set_page_load_timeout(max_wait)
+        driver.set_script_timeout(max_wait)
+        driver.get(url)
+        if (self.debug):
+            driver.save_screenshot("tmp/python_org-%s.png" % self.ip)
+        driver.quit()             
+
     def get_address(self,url):
         return self.address_map[url]
     
@@ -178,67 +222,3 @@ class Observer:
         description = []
         description.append("Observer %s" % self.ip)
         return "\n".join(description)
-            
-        
-class Address:
-    def __init__(self, url, content):
-        self.url = url
-        self.content = content
-        self.scripts = {}
-        self.diff_scripts = []
-        self.vars = {}
-        self.set_data()
-
-    def describe(self):
-        return "Url: %s with content length: %s" % (self.url,len(self.content))
-                    
-    def set_data(self):
-        vars = self.parse_scripts()
-        self.get_child("",vars,0)
-        
-    ## Recursively create a hash for js variables
-    def get_child(self,name,child,place):
-        if place == 5:
-            return 
-        if type(child) is dict:
-            for leaf in child:
-                if name != "":
-                    use_name = name + "-" + str(leaf)
-                else:
-                    use_name = str(leaf)
-                self.get_child(use_name,child[leaf],place + 1)
-        else:
-            self.vars[name] = child                
-        
-    def description(self):
-        description = []
-        description.append("Url: %s with content length: %s" % (self.url,len(self.content)))
-        return description
-    
-    def describe_data(self):
-        description = []
-        for var in self.vars:
-            description.append("\t%s : %s" % (var,self.vars[var]))
-        return description
-
-    def parse_scripts(self):
-        soup = BeautifulSoup(self.content)
-        all_data = []
-        res_dict = {}
-        logging.debug("Parsing script for %s" % self.url)
-        for script_part in soup.findAll('script'):
-            try:
-                json_data = re.findall('({.*})', script_part.string)
-                for j_data in json_data:
-                    try:
-                        data = json.loads(j_data)
-                        if len(data):
-                            all_data.append(data)
-                    except:
-                        pass
-            except:
-                pass
-        
-        for data in all_data:
-            res_dict.update(data)
-        return res_dict
