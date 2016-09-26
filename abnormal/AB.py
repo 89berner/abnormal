@@ -22,11 +22,12 @@ from AutoVivification import AutoVivification
 
 class ThreadProcessTarget(threading.Thread):
     """Threaded Url Grab"""
-    def __init__(self, queue, working_observers, max_ips):
+    def __init__(self, queue, working_observers, max_ips, capture_on):
         threading.Thread.__init__(self)
         self.queue = queue
         self.working_observers = working_observers
         self.max_ips = max_ips
+        self.capture_on = capture_on
 
     def run(self):
         while True:
@@ -35,10 +36,11 @@ class ThreadProcessTarget(threading.Thread):
                 status = observer.request()
                 if (status == 1): #Working observers
                     self.working_observers.append(observer)
-                    try:
-                        observer.take_screenshots()
-                    except:
-                        pass
+                    if self.capture_on:
+                        try:
+                            observer.take_screenshots()
+                        except:
+                            pass
                     logging.debug("Count is now %s of %s" % (len(self.working_observers), self.max_ips) )
                 else:
                     #logging.debug("Observer %s failed" % observer.ip)
@@ -50,8 +52,8 @@ class AB:
         self.targets = {}
         self.observer_list = proxies
         
-    def add_target(self,name,urls,max_ips, max_threads, debug, no_proxy):
-        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug, no_proxy)
+    def add_target(self,name,urls,max_ips, max_threads, debug, no_proxy, capture_on):
+        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug, no_proxy, capture_on)
         self.targets[name] = target
         
     def process(self):
@@ -73,11 +75,12 @@ class AB:
         target.check_var(name)
 
 class Target:
-    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug, no_proxy):
+    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug, no_proxy, capture_on):
         self.urls = urls
         self.max_threads = max_threads
         self.name    = name
         self.max_ips = max_ips
+        self.capture_on = capture_on
 
         self.possible_observers = []
         for ip in ip_list:
@@ -123,7 +126,7 @@ class Target:
         working_observers = []
         queue = Queue.Queue()
         for i in range(self.max_threads):
-            t = ThreadProcessTarget(queue,working_observers,self.max_ips)
+            t = ThreadProcessTarget(queue,working_observers,self.max_ips,self.capture_on)
             t.setDaemon(True)
             t.start()
 

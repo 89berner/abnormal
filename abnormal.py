@@ -46,6 +46,10 @@ parser.add_option("-n", "--no_proxy",
 parser.add_option("-c", "--cli",
                   dest="cli", default=0,
                   help="Use command line interface to interact with observers")
+parser.add_option("-s", "--screen_shot",
+                  dest="capture_on", default=0,
+                  help="Compare screenshots of site")
+
 
 (options, args) = parser.parse_args()
 
@@ -72,7 +76,7 @@ working_proxies = proxies.get_proxies()
 #working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
 
 ab = AB(working_proxies)
-ab.add_target(options.url,urls,options.n_proxies, options.n_threads, options.debug, options.no_proxy)
+ab.add_target(options.url,urls,options.n_proxies, options.n_threads, options.debug, options.no_proxy, options.capture_on)
 ab.process()
 ab.report()
 
