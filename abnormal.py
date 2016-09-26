@@ -8,7 +8,7 @@ import traceback
 import requests
 import json
 import re
-import proxies
+import logging
 from optparse import OptionParser
 
 from abnormal import AutoVivification
@@ -16,9 +16,9 @@ from abnormal import AB
 from abnormal import Target
 from abnormal import Observer
 from abnormal import Address
+from abnormal import proxies
+from abnormal import Cli
 
-#Set up logging
-import logging
 parser = OptionParser()
 parser.add_option("-u", "--url", dest="url",
                   help="Url to use")
@@ -40,17 +40,26 @@ parser.add_option("-f", "--file",
 parser.add_option("-d", "--debug",
                   dest="debug", default=0,
                   help="Debug mode")
+parser.add_option("-n", "--no_proxy",
+                  dest="no_proxy", default=0,
+                  help="Avoid using proxies, only for debug purpouses")
+parser.add_option("-c", "--cli",
+                  dest="cli", default=0,
+                  help="Use command line interface to interact with observers")
+
 (options, args) = parser.parse_args()
 
 if not options.url:   # if filename is not given
     parser.error('A url was not given')
 
+#Set up logging
 numeric_level = getattr(logging, options.loglevel.upper(), None)
 if not isinstance(numeric_level, int):
     raise ValueError('Invalid log level: %s' % options.loglevel)
 logging.basicConfig(level=numeric_level)
 logging.getLogger("requests").setLevel(logging.WARNING)
 requests.packages.urllib3.disable_warnings()
+
 #Start
 urls = []
 if options.url:
@@ -63,6 +72,9 @@ working_proxies = proxies.get_proxies()
 #working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
 
 ab = AB(working_proxies)
-ab.add_target(options.url,urls,options.n_proxies, options.n_threads, options.debug)
+ab.add_target(options.url,urls,options.n_proxies, options.n_threads, options.debug, options.no_proxy)
 ab.process()
 ab.report()
+
+if (options.cli):
+  cli.start(ab)

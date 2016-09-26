@@ -1,5 +1,6 @@
 import sys
 import os
+import signal
 import traceback
 import requests
 from sets import Set
@@ -46,25 +47,33 @@ class ThreadProcessTarget(threading.Thread):
 
 class AB:
     def __init__(self, proxies):
-        self.targets = []
+        self.targets = {}
         self.observer_list = proxies
         
-    def add_target(self,name,urls,max_ips, max_threads, debug):
-        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug)
-        self.targets.append(target)
+    def add_target(self,name,urls,max_ips, max_threads, debug, no_proxy):
+        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug, no_proxy)
+        self.targets[name] = target
         
     def process(self):
-        for target in self.targets:
-            print "Starting for target %s" % target.name
-            target.process()
+        for name in self.targets:
+            print "Starting for target %s" % name
+            self.targets[name].process()
             
     def report(self):
-        for target in self.targets:
-            target.report()
+        for name in self.targets:
+            self.targets[name].report()
             print "-" * 50
 
+    def get_var_observers(target_name,name,value = ""):
+        target = self.targets[name]
+        target.get_var_observers(name,value)
+
+    def check_var(target_name,name):
+        target = self.targets[name]
+        target.check_var(name)
+
 class Target:
-    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug):
+    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug, no_proxy):
         self.urls = urls
         self.max_threads = max_threads
         self.name    = name
@@ -72,7 +81,7 @@ class Target:
 
         self.possible_observers = []
         for ip in ip_list:
-            self.possible_observers.append(Observer(ip,urls,debug))
+            self.possible_observers.append(Observer(ip,urls,debug,no_proxy))
 
         self.diff_vars    = {}
         self.missing_vars = {}
@@ -83,6 +92,8 @@ class Target:
         #Set instance variables
         self.observers    = []
         self.results = Result(name, urls)
+
+        self.observers_vars = AutoVivification( )
 
     def process(self):
         
@@ -134,6 +145,12 @@ class Target:
                 self.missing_vars[url].add(var)
             elif (vars1[var] != vars2[var]):
                 self.diff_vars[url].add(var)
+
+        #Populate observers index
+        for var in vars1:
+            self.observers_vars[observer1.ip][var] = vars1[var]
+        for var in vars2:
+            self.observers_vars[observer2.ip][var] = vars2[var]
                 
     def compare(self,url):
         logging.debug('Doing compare for %s' % url)
@@ -159,15 +176,35 @@ class Target:
 
     def report(self):
         print "Report for %s" % self.name
-        self.results.report()      
-        
+        self.results.report()
+        logging.debug(self.observers_vars)
+
+    #Go through the observers looking that at least one has the var
+    def check_var(name):
+        for observer in self.observers_vars:
+            for var in self.observers_vars[observer]:
+                return True
+        return False
+
+    #Go through the observers looking for the ones that have the variables
+    def get_var_observers(name,value):
+        result = []
+        for observer in self.observers_vars:
+            for var in self.observers_vars[observer]:
+                if var == name:
+                    if len(value) and self.observers_vars[observer][var] == value:
+                        result.append(observer)
+                    else:
+                        result.append(observer)
+
 class Observer:
-    def __init__(self, ip, urls, debug):
+    def __init__(self, ip, urls, debug, no_proxy):
         self.ip = ip
         self.urls = urls
         self.address_map = {}
         self.session = requests.Session()
         self.debug = debug
+        self.no_proxy = no_proxy
         
     def request(self):
         status = 0
@@ -180,8 +217,11 @@ class Observer:
         
     def get_url(self,url):
         proxies = {'http' : "http://%s" % self.ip, 'https': "https://%s" % self.ip}
+        if self.no_proxy:
+            proxies = {}
         try:
-            r = self.session.get(url, proxies=proxies, verify=False, timeout=5)
+            #r = self.session.get(url, proxies=proxies, verify=False, timeout=5)
+            r = self.session.get(url, verify=False, timeout=5)
         except Exception as e:
             #logging.debug(traceback.format_exception(*sys.exc_info()))
             return 0
@@ -203,14 +243,21 @@ class Observer:
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.89 Safari/537.36"
         )
 
-        driver = webdriver.PhantomJS(service_log_path=os.path.devnull, desired_capabilities=dcap, service_args=["--proxy=%s" % self.ip, '--ignore-ssl-errors=true', '--ssl-protocol=any'])
-        driver.set_window_size(1280,800)
-        driver.set_page_load_timeout(max_wait)
-        driver.set_script_timeout(max_wait)
-        driver.get(url)
-        if (self.debug):
-            driver.save_screenshot("tmp/python_org-%s.png" % self.ip)
-        driver.quit()             
+        service_args = ['--ignore-ssl-errors=true', '--ssl-protocol=any']
+        if not self.no_proxy:
+            service_args.append("--proxy=%s" % self.ip)
+
+        driver = webdriver.PhantomJS(service_log_path=os.path.devnull, desired_capabilities=dcap, service_args=service_args)
+        try:
+            driver.set_window_size(1280,800)
+            driver.set_page_load_timeout(max_wait)
+            driver.set_script_timeout(max_wait)
+            driver.get(url)
+            if (self.debug):
+                driver.save_screenshot("tmp/python_org-%s.png" % self.ip)
+        finally:
+            driver.close()
+            driver.quit()             
 
     def get_address(self,url):
         return self.address_map[url]

@@ -42,8 +42,8 @@ class UrlResult:
         if var_name not in self.diff_vars:
             self.diff_vars[var_name] = {}
         if var_value not in self.diff_vars[var_name]:
-            self.diff_vars[var_name][var_value] = 0
-        self.diff_vars[var_name][var_value] += 1
+            self.diff_vars[var_name][var_value] = 0 #[]
+        self.diff_vars[var_name][var_value] += 1 #append
 
     def get_results_map(self):
         results = {}
