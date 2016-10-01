@@ -64,5 +64,8 @@ class Address:
                     use_name = str(leaf)
                 self.get_child(use_name,child[leaf],place + 1)
         else:
-            self.vars[name] = child                
+            self.vars[name] = child         
+
+    def set_capture_file(self,filename):
+        self.filename = filename
         

@@ -11,6 +11,10 @@ import json
 import logging
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from fake_useragent import UserAgent
+import time 
+import cv2
+import numpy as np
 
 #Reduce logging for selenium
 from selenium.webdriver.remote.remote_connection import LOGGER
@@ -19,6 +23,10 @@ LOGGER.setLevel(logging.WARNING)
 from Result import Result
 from Address import Address
 from AutoVivification import AutoVivification
+import Utils
+
+ua = UserAgent()
+agent = ua.random
 
 class ThreadProcessTarget(threading.Thread):
     """Threaded Url Grab"""
@@ -52,8 +60,9 @@ class AB:
         self.targets = {}
         self.observer_list = proxies
         
-    def add_target(self,name,urls,max_ips, max_threads, debug, no_proxy, capture_on):
-        target = Target(name,urls,self.observer_list,max_ips, max_threads, debug, no_proxy, capture_on)
+    def add_target(self,urls,options):
+        name = options.url
+        target = Target(name,urls,self.observer_list,options)
         self.targets[name] = target
         
     def process(self):
@@ -75,16 +84,16 @@ class AB:
         target.check_var(name)
 
 class Target:
-    def __init__(self, name, urls, ip_list, max_ips, max_threads, debug, no_proxy, capture_on):
+    def __init__(self, name, urls, ip_list, options):
         self.urls = urls
-        self.max_threads = max_threads
+        self.max_threads = options.n_threads
         self.name    = name
-        self.max_ips = max_ips
-        self.capture_on = capture_on
+        self.max_ips = options.n_proxies
+        self.capture_on = options.capture_on
 
         self.possible_observers = []
         for ip in ip_list:
-            self.possible_observers.append(Observer(ip,urls,debug,no_proxy))
+            self.possible_observers.append(Observer(ip,urls,options.debug,options.no_proxy))
 
         self.diff_vars    = {}
         self.missing_vars = {}
@@ -96,7 +105,8 @@ class Target:
         self.observers    = []
         self.results = Result(name, urls)
 
-        self.observers_vars = AutoVivification( )
+        self.observers_vars = AutoVivification()
+        self.processed      = AutoVivification()
 
     def process(self):
         
@@ -111,12 +121,14 @@ class Target:
 
     def analyze_observers(self):
         #For each url match observer by observer and see
-        #what variables are missing or different
         for url in self.urls:
             for observer1 in self.observers:
                 for observer2 in self.observers:
                     if (observer1.ip != observer2.ip):
+                        #what variables are missing or different
                         self.check_vars(observer1,observer2,url)
+                        #difference between screenshots
+                        self.check_screenshots(observer1,observer2,url)
 
     def compare_observers(self):
         for url in self.urls:
@@ -154,6 +166,35 @@ class Target:
             self.observers_vars[observer1.ip][var] = vars1[var]
         for var in vars2:
             self.observers_vars[observer2.ip][var] = vars2[var]
+
+    def check_screenshots(self, observer1, observer2, url):
+        logging.debug('Comparing images between %s-%s for %s' % (observer1.ip,observer2.ip,url))
+        image_name_1 = observer1.get_image(url)
+        image_name_2 = observer2.get_image(url)
+
+        image1 = cv2.imread(image_name_1)
+        image2 = cv2.imread(image_name_2)
+
+        difference_1 = cv2.subtract(image1, image2)
+        difference_2 = cv2.subtract(image2, image1)
+        result = not np.any(difference_1)  
+
+        if result is False and not self.get_processed(observer2,observer1,url,'screen'):
+            logging.debug('The images are different')
+            filename_1 = "%s-%s-%s" % (observer1.ip, observer2.ip, url)
+            cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_1), difference_1)
+            filename_2 = "%s-%s-%s" % (observer2.ip, observer1.ip, url)
+            cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_2), difference_2)
+            
+            concat_images = np.concatenate((image1, image2, difference_1, difference_2), axis=1)
+            cv2.imwrite("tmp/comp_full/%s.jpg" % Utils.as_filename(filename_1), concat_images)
+
+            contourn_image1 = Utils.draw_contourns(image1,image2)
+            cv2.imwrite("tmp/comp_draw/%s.jpg" % Utils.as_filename(filename_1), contourn_image1)
+
+        self.set_processed(observer1,observer2,url,'screen')
+        logging.debug("Finished comparing images..")
+
                 
     def compare(self,url):
         logging.debug('Doing compare for %s' % url)
@@ -200,6 +241,14 @@ class Target:
                     else:
                         result.append(observer)
 
+    def set_processed(self,observer1,observer2,url,m_type):
+        name = "%s-%s" % (observer1.ip, observer2.ip)
+        self.processed[m_type][url][name] = 1
+
+    def get_processed(self,observer1,observer2,url,m_type):
+        name = "%s-%s" % (observer1.ip, observer2.ip)
+        return self.processed[m_type][url][name]
+
 class Observer:
     def __init__(self, ip, urls, debug, no_proxy):
         self.ip = ip
@@ -208,7 +257,11 @@ class Observer:
         self.session = requests.Session()
         self.debug = debug
         self.no_proxy = no_proxy
-        
+
+        #Set user agent for observer
+        self.ua = agent
+        self.session.headers.update({'user-agent' : self.ua})
+
     def request(self):
         status = 0
         for url in self.urls:
@@ -231,7 +284,8 @@ class Observer:
         address = Address(url,r.content)
         self.address_map[url] = address
         if (self.debug):
-            f = open("tmp/%s-%s.txt" % (url.replace("/",""), self.ip ), 'w')
+            filename = "tmp/source/%s" % Utils.as_filename("%s-%s.txt" % (url, self.ip))
+            f = open(filename, 'w')
             f.write(r.content)
         return 1
 
@@ -240,11 +294,9 @@ class Observer:
             self.take_screenshot(url)
 
     def take_screenshot(self,url):
-        max_wait = 60
+        max_wait = 300
         dcap = dict(DesiredCapabilities.PHANTOMJS)
-        dcap["phantomjs.page.settings.userAgent"] = (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.89 Safari/537.36"
-        )
+        dcap["phantomjs.page.settings.userAgent"] = ( self.ua )
 
         service_args = ['--ignore-ssl-errors=true', '--ssl-protocol=any']
         if not self.no_proxy:
@@ -256,8 +308,13 @@ class Observer:
             driver.set_page_load_timeout(max_wait)
             driver.set_script_timeout(max_wait)
             driver.get(url)
-            if (self.debug):
-                driver.save_screenshot("tmp/python_org-%s.png" % self.ip)
+            time.sleep(1)
+            filename = "tmp/screen/%s" % Utils.as_filename("%s-%s.png" % (url,self.ip))
+            driver.save_screenshot(filename)
+            self.get_address(url).set_capture_file(filename)
+            print "Saved %s" % filename
+        except Exception as e:
+            print "Error taking screenshot: %s" % (traceback.format_exception(*sys.exc_info()))
         finally:
             driver.close()
             driver.quit()             
@@ -267,6 +324,9 @@ class Observer:
     
     def get_content(self,url):
         return self.address_map[url].content
+
+    def get_image(self,url):
+        return self.address_map[url].filename
             
     def description(self):
         description = []

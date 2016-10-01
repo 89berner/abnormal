@@ -4,3 +4,5 @@ lxml
 requests
 tabulate
 selenium
+fake-useragent
+cv2
