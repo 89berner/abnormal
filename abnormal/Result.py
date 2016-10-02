@@ -15,6 +15,8 @@ class Result:
 
     def report(self):
         for url in self.urls:
+            print "*" * 50
+            print "For url: %s" % url
             self.print_table(url)
 
     def print_table(self, url):
@@ -29,13 +31,19 @@ class Result:
 class UrlResult:
     def __init__(self, url):
         self.url = url
-        self.missing_vars = {}
-        self.diff_vars    = {}
+        self.missing_vars  = {}
+        self.diff_vars     = {}
+        self.missing_links = {}
 
     def set_missing_var(self,var_name):
         if var_name not in self.missing_vars:
             self.missing_vars[var_name] = 0
         self.missing_vars[var_name] += 1
+
+    def set_missing_link(self,var_name):
+        if link_name not in self.missing_links:
+            self.missing_links[var_name] = 0
+        self.missing_links[var_name] += 1
 
     #Set for each variable the different values and the occurances
     def set_diff_var(self,var_name,var_value):
@@ -45,8 +53,15 @@ class UrlResult:
             self.diff_vars[var_name][var_value] = 0 #[]
         self.diff_vars[var_name][var_value] += 1 #append
 
-    def get_results_map(self):
+    def get_results_map(self):  
         results = {}
+
+        results['missing_links'] = {}
+        results['missing_links']['description'] = "Links missing for some observers"
+        results['missing_links']['results'] = []
+        results['missing_links']['columns'] = ['Link', 'Amount']
+        for link in self.missing_links:
+            results['missing_links']['results'].append([link, self.missing_links[var]])
 
         results['missing_vars'] = {}
         results['missing_vars']['description'] = "Variables missing for some observers"

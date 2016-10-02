@@ -1,21 +1,8 @@
-import requests
-from time import sleep
-from lxml.html.diff import htmldiff
-import pprint
-import re
-import sys
-import traceback
-import requests
-import json
-import re
 import logging
 from optparse import OptionParser
 
-from abnormal import AutoVivification
 from abnormal import AB
 from abnormal import Target
-from abnormal import Observer
-from abnormal import Address
 from abnormal import proxies
 from abnormal import Cli
 
@@ -61,16 +48,20 @@ numeric_level = getattr(logging, options.loglevel.upper(), None)
 if not isinstance(numeric_level, int):
     raise ValueError('Invalid log level: %s' % options.loglevel)
 logging.basicConfig(level=numeric_level)
-logging.getLogger("requests").setLevel(logging.WARNING)
-requests.packages.urllib3.disable_warnings()
 
 #Start
 urls = []
 if options.url:
-    urls = [ options.url ]
+    if ',' in options.url:
+      urls = options.url.split(",")
+    else:
+      urls = [ options.url ]
 else:
     #open file
     pass
+
+if options.n_threads > options.n_proxies:
+  options.n_threads = options.n_proxies
 
 working_proxies = proxies.get_proxies()
 #working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)

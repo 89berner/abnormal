@@ -1,15 +1,25 @@
-from BeautifulSoup import BeautifulSoup
 import logging
 import json
 import re
+import time
+from BeautifulSoup import BeautifulSoup
+
+from selenium import webdriver
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+#Reduce logging for selenium
+from selenium.webdriver.remote.remote_connection import LOGGER
+LOGGER.setLevel(logging.WARNING)
 
 class Address:
-    def __init__(self, url, content):
+    def __init__(self, url, content, observer):
         self.url = url
         self.content = content
         self.scripts = {}
         self.diff_scripts = []
         self.vars = {}
+        self.links = {}
+        self.filename = ""
+        self.observer = observer
         self.set_data()
 
     def describe(self):
@@ -29,6 +39,7 @@ class Address:
     def set_data(self):
         vars = self.parse_scripts()
         self.get_child("",vars,0)
+        self.parse_links()
 
     def parse_scripts(self):
         soup = BeautifulSoup(self.content)
@@ -51,7 +62,14 @@ class Address:
         for data in all_data:
             res_dict.update(data)
         return res_dict
-        
+
+    def parse_links(self):
+        soup = BeautifulSoup(self.content)
+        for link in soup.findAll('a'):
+            if 'href' in link:
+                link_name = link['href'].strip().replace(" ","")
+                self.links[link_name] = 1
+
     ## Recursively populate self.vars map for js variables
     def get_child(self,name,child,place):
         if place == 5:
@@ -66,6 +84,29 @@ class Address:
         else:
             self.vars[name] = child         
 
-    def set_capture_file(self,filename):
-        self.filename = filename
+    def take_screenshot(self):
+        max_wait = 300
+        dcap = dict(DesiredCapabilities.PHANTOMJS)
+        dcap["phantomjs.page.settings.userAgent"] = ( self.observer.ua )
+
+        service_args = ['--ignore-ssl-errors=true', '--ssl-protocol=any']
+        if not self.no_proxy:
+            service_args.append("--proxy=%s" % self.ip)
+
+        driver = webdriver.PhantomJS(service_log_path=os.path.devnull, desired_capabilities=dcap, service_args=service_args)
+        try:
+            driver.set_window_size(1280,800)
+            driver.set_page_load_timeout(max_wait)
+            driver.set_script_timeout(max_wait)
+            driver.get(self.url)
+            time.sleep(1)
+            filename = "tmp/screen/%s" % Utils.as_filename("%s-%s.png" % (self.url,self.observer.ip))
+            driver.save_screenshot(filename)
+            self.filename = filename
+            logging.debug("Saved %s" % filename)
+        except Exception as e:
+            print "Error taking screenshot: %s" % (traceback.format_exception(*sys.exc_info()))
+        finally:
+            driver.close()
+            driver.quit()
         

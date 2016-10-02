@@ -14,16 +14,25 @@ def get_contours(image1):
 	mono_difference = cv2.cvtColor(image1, cv2.COLOR_RGB2GRAY)
 	(thresh, im_bw) = cv2.threshold(mono_difference, 0, 255, 1)
 	contours, hierarchy = cv2.findContours(im_bw, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-
 	return contours
+
 
 def get_diff_contourns(image1, image2):
 	difference = cv2.subtract(image1, image2)
+
 	contours = get_contours(difference)
 	cv2.drawContours(difference, contours, -1, (0,255,0), 3)
 	contours = get_contours(difference)
 
 	return contours
+
+def resize_images(image1, image2):
+	(h1,w1,z) = image1.shape
+	(h2,w2,z) = image2.shape
+	if h1 < h2 or w1 < w2:
+		image1.resize(image2.shape, refcheck=False)
+	elif h2 < h1 or w2 < w1:
+		image2.resize(image1.shape, refcheck=False)
 
 def draw_contourns(image1, image2):
 	contours = get_diff_contourns(image1,image2)
