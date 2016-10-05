@@ -3,6 +3,8 @@ Abnormal python a/b testing script
 
 *** This scripts are on a testing phase, use at your own peril ***
 
+This script requieres a working installation of phantomjs and opencv
+
 Example of using the script to identify new or modified js variables by using N number of proxies:
 
 ```shell
