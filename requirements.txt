@@ -1,8 +1,6 @@
-traceback
 BeautifulSoup
 lxml
 requests
 tabulate
 selenium
 fake-useragent
-cv2

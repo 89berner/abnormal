@@ -1,9 +1,3 @@
 .DS_Store
 *.pyc
-tmp/comp/*
-tmp/comp_draw/*
-tmp/source/*
-tmp/screen/*
-tmp/uniq_comp/*
-tmp/comp_full/*
 start.sh
