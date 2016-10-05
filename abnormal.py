@@ -64,7 +64,6 @@ if options.n_threads > options.n_proxies:
   options.n_threads = options.n_proxies
 
 working_proxies = proxies.get_proxies()
-#working_proxies = proxies.check_proxies(options.n_threads,options.n_proxies)
 
 ab = AB(working_proxies)
 ab.add_target(urls,options)
@@ -72,4 +71,5 @@ ab.process()
 ab.report()
 
 if (options.cli):
-  cli.start(ab)
+  cli = Cli(ab)
+  cli.start()

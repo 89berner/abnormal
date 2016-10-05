@@ -21,10 +21,10 @@ class AB:
             self.targets[name].report()
             print "-" * 50
 
-    def get_var_observers(target_name,name,value = ""):
-        target = self.targets[name]
-        target.get_var_observers(name,value)
+    def get_var_observers(self,name,value = ""):
+        for target in self.targets.values():
+            return target.get_var_observers(name,value)
 
-    def check_var(target_name,name):
-        target = self.targets[name]
-        target.check_var(name)
+    def check_var(self,name):
+        for target in self.targets.values():
+            return target.check_var(name)

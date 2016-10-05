@@ -34,6 +34,8 @@ class UrlResult:
         self.missing_vars  = {}
         self.diff_vars     = {}
         self.missing_links = {}
+        self.diff_images   = {}
+        self.diff_marked_images = {}
 
     def set_missing_var(self,var_name):
         if var_name not in self.missing_vars:
@@ -53,8 +55,28 @@ class UrlResult:
             self.diff_vars[var_name][var_value] = 0 #[]
         self.diff_vars[var_name][var_value] += 1 #append
 
+    def set_diff_images(self, md5, file_name):
+        self.diff_images[md5] = file_name
+
+    def set_diff_marked_images(self, md5, file_name):
+        self.diff_marked_images[md5] = file_name
+
     def get_results_map(self):  
         results = {}
+
+        results['diff_images'] = {}
+        results['diff_images']['description'] = "Different captures"
+        results['diff_images']['results'] = []
+        results['diff_images']['columns'] = ['md5', 'Filename']
+        for md5 in self.diff_images:
+            results['diff_images']['results'].append([md5, self.diff_images[md5]])
+
+        results['diff_marked_images'] = {}
+        results['diff_marked_images']['description'] = "Different captures marked"
+        results['diff_marked_images']['results'] = []
+        results['diff_marked_images']['columns'] = ['md5', 'Filename']
+        for md5 in self.diff_marked_images:
+            results['diff_marked_images']['results'].append([md5, self.diff_marked_images[md5]])
 
         results['missing_links'] = {}
         results['missing_links']['description'] = "Links missing for some observers"
