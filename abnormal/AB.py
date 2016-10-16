@@ -28,3 +28,15 @@ class AB:
     def check_var(self,name):
         for target in self.targets.values():
             return target.check_var(name)
+
+    def get_img_observers(self,md5):
+        for target in self.targets.values():
+            return target.get_img_observers(md5)
+
+    def check_img(self,name):
+        for target in self.targets.values():
+            return target.check_img(name)
+
+    def close(self):
+        for target in self.targets.values():
+            return target.close()

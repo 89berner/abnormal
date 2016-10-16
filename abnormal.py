@@ -36,6 +36,9 @@ parser.add_option("-c", "--cli",
 parser.add_option("-s", "--screen_shot",
                   dest="capture_on", default=0,
                   help="Compare screenshots of site")
+parser.add_option("-x", "--no_source",
+                  dest="no_source", default=0,
+                  help="Avoid analysis of source code")
 
 
 (options, args) = parser.parse_args()
@@ -73,3 +76,5 @@ ab.report()
 if (options.cli):
   cli = Cli(ab)
   cli.start()
+
+ab.close()

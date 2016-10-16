@@ -35,7 +35,9 @@ class Observer:
             if (status):
                 if (self.options.capture_on):
                     try:
-                        address.take_screenshot()
+                        screenshot_status = address.take_screenshot()
+                        if (screenshot_status == 0):
+                            return 0
                     except Exception as e:
                         print "Error taking screenshot: %s" % (traceback.format_exception(*sys.exc_info()))
                         return 0

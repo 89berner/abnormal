@@ -9,6 +9,7 @@ import Utils
 import cv2
 import hashlib
 from BeautifulSoup import BeautifulSoup
+from selenium.webdriver.common.by import By
 
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -26,6 +27,7 @@ class Address:
         self.links = {} #Map of the links and the amount of times they appear
         self.image_filename = "" #Filename
         self.image_hash = "" #Hash of the image
+        self.driver  = self.get_driver()
 
     def get_url(self,url):
         proxies = {'http' : "http://%s" % self.observer.ip, 'https': "https://%s" % self.observer.ip}
@@ -95,8 +97,7 @@ class Address:
                     self.links[link_name] = 0
                 self.links[link_name] += 1
 
-    def take_screenshot(self):
-        max_wait = 300
+    def get_driver(self):
         dcap = dict(DesiredCapabilities.PHANTOMJS)
         dcap["phantomjs.page.settings.userAgent"] = ( self.observer.ua )
 
@@ -105,12 +106,17 @@ class Address:
             service_args.append("--proxy=%s" % self.observer.ip)
 
         driver = webdriver.PhantomJS(service_log_path=os.path.devnull, desired_capabilities=dcap, service_args=service_args)
+        driver.set_window_size(1280,800)
+        driver.set_page_load_timeout(20)
+        driver.set_script_timeout(30)
+
+        return driver
+
+    def take_screenshot(self):
+        driver = self.driver
+        driver.get(self.url)
+        time.sleep(10)
         try:
-            driver.set_window_size(1280,800)
-            driver.set_page_load_timeout(max_wait)
-            driver.set_script_timeout(max_wait)
-            driver.get(self.url)
-            time.sleep(1)
             filename = "tmp/screen/%s" % Utils.as_filename("%s-%s.png" % (self.url,self.observer.ip))
             driver.save_screenshot(filename)
             self.image_filename = filename
@@ -119,9 +125,27 @@ class Address:
             logging.debug("Saved %s" % filename)
         except Exception as e:
             print "Error taking screenshot: %s" % (traceback.format_exception(*sys.exc_info()))
-        finally:
             driver.close()
             driver.quit()
+            return 0
+
+    def perform_action(self,action):
+        try:
+            driver = self.driver
+            driver.get(self.url)
+            time.sleep(10)
+            try:
+                element = driver.find_element_by_id('new_button')
+                logging.debug("Element chosen is: %s" % element)
+                element.click()
+                logging.debug("Clicked on element %s" % element)
+            except Exception as e:
+                print "Error taking action %s: %s" % (action,traceback.format_exception(*sys.exc_info()))
+                driver.close()
+                driver.quit()
+                return 0
+        except:
+            print "Error with observer %s" % self.observer.ip
 
     def read_image(self):
         image = cv2.imread(self.image_filename)

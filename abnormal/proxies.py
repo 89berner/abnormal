@@ -98,7 +98,7 @@ def check_proxies(threads, proxies_amount):
         t.start()
 
     proxies = from_cyber_syndrome()[:proxies_amount*4]
-    logging.info("Got %s proxies from cyber syndrome" % len(proxies))
+    print("Got %s proxies from cyber syndrome" % len(proxies))
 
     proxies = list(set(proxies))
 
@@ -107,5 +107,5 @@ def check_proxies(threads, proxies_amount):
 
     #wait on the queue until everything has been processed     
     queue.join()
-    logging.info("Got %s working proxies" % len(output[:proxies_amount]))
+    print("Got %s working proxies" % len(output[:proxies_amount]))
     return output

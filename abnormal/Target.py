@@ -60,8 +60,9 @@ class Target:
         self.observers    = []
         self.results = Result(name, urls)
 
-        self.observers_vars = AutoVivification()
-        self.processed      = AutoVivification()
+        self.observers_vars   = AutoVivification()
+        self.observers_images = AutoVivification()
+        self.processed        = AutoVivification()
         self.contourns = {}
 
     def process(self):
@@ -137,37 +138,46 @@ class Target:
             self.observers_vars[observer2.ip][url][var] = vars2[var]
 
     def check_screenshots(self, observer1, observer2, url):
-        logging.debug('Comparing images between %s-%s for %s' % (observer1.ip,observer2.ip,url))
-        image1 = observer1.read_image(url)
-        image2 = observer2.read_image(url)
 
-        Utils.resize_images(image1,image2)
+        if not self.get_processed(observer2,observer1,url,'screen'):
+            logging.debug('Comparing images between %s-%s for %s' % (observer1.ip,observer2.ip,url))
+            image1 = observer1.read_image(url)
+            image2 = observer2.read_image(url)
 
-        difference_1 = cv2.subtract(image1, image2)
-        difference_2 = cv2.subtract(image2, image1)
-        result = not np.any(difference_1)  
+            Utils.resize_images(image1,image2)
 
-        if result is False: #and not self.get_processed(observer2,observer1,url,'screen')
-            #First set up different types of images to have them on their own
-            self.set_different_image(image1, url, observer1.get_image(url))
-            self.set_different_image(image2, url, observer2.get_image(url))
+            difference_1 = cv2.subtract(image1, image2)
+            difference_2 = cv2.subtract(image2, image1)
+            result = not np.any(difference_1)  
 
-            logging.debug('The images are different')
-            filename_1 = "%s-%s-%s" % (observer1.ip, observer2.ip, url)
-            cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_1), difference_1)
-            filename_2 = "%s-%s-%s" % (observer2.ip, observer1.ip, url)
-            cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_2), difference_2)
-            
-            concat_images = np.concatenate((image1, image2, difference_1, difference_2), axis=1)
-            cv2.imwrite("tmp/comp_full/%s.jpg" % Utils.as_filename(filename_1), concat_images)
+            #If different
+            if result is False:
 
-            contourn_image1 = Utils.draw_contourns(image1,image2)
-            file_path = "tmp/comp_draw/%s.jpg" % Utils.as_filename(filename_1)
-            cv2.imwrite(file_path, contourn_image1)
-            self.set_different_marked_image(contourn_image1,url,file_path)
+                self.observers_images[observer1.ip][url] = hashlib.md5(image1).hexdigest()
+                self.observers_images[observer2.ip][url] = hashlib.md5(image2).hexdigest()
 
-        self.set_processed(observer1,observer2,url,'screen')
-        logging.debug("Finished comparing images..")
+                #First set up different types of images to have them on their own
+                self.set_different_image(image1, url, observer1.get_image(url))
+                self.set_different_image(image2, url, observer2.get_image(url))
+
+                logging.debug('The images are different')
+                filename_1 = "%s-%s-%s" % (observer1.ip, observer2.ip, url)
+                #cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_1), difference_1)
+                #filename_2 = "%s-%s-%s" % (observer2.ip, observer1.ip, url)
+                #cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_2), difference_2)
+                
+                #concat_images = np.concatenate((image1, image2, difference_1, difference_2), axis=1)
+                #cv2.imwrite("tmp/comp_full/%s.jpg" % Utils.as_filename(filename_1), concat_images)
+
+                contourn_image1 = Utils.draw_contourns(image1,image2)
+                file_path = "tmp/comp_draw/%s.jpg" % Utils.as_filename(filename_1)
+                cv2.imwrite(file_path, contourn_image1)
+                self.set_different_marked_image(contourn_image1,url,file_path)
+
+            self.set_processed(observer1,observer2,url,'screen')
+            logging.debug("Finished comparing images..")
+        else:
+            logging.debug("Skipping comparison")
     
     def check_links(self,observer1,observer2,url):
         links1 = observer1.get_address(url).links 
@@ -262,6 +272,23 @@ class Target:
                             result.append(observer)
         return result
 
+    def check_img(self,md5):
+        for observer in self.observers:
+            for url in observer.urls:
+                if md5 in self.observers_images[observer.ip][url]:
+                    return True
+        return False
+
+    #Go through the observers looking for the ones that have the variables
+    def get_img_observers(self,md5):
+        result = Set()
+        for observer in self.observers:
+            for url in observer.urls:
+                observer_md5 = self.observers_images[observer.ip][url]
+                if observer_md5 == md5:
+                    result.add((url,observer))
+        return result
+
     def set_processed(self,observer1,observer2,url,m_type):
         name = "%s-%s" % (observer1.ip, observer2.ip)
         self.processed[m_type][url][name] = 1
@@ -269,3 +296,10 @@ class Target:
     def get_processed(self,observer1,observer2,url,m_type):
         name = "%s-%s" % (observer1.ip, observer2.ip)
         return self.processed[m_type][url][name]
+
+    def close(self):
+        for observer in self.observers:
+            for url in observer.urls:
+                addr = observer.get_address(url)
+                addr.driver.close()
+                addr.driver.quit()
