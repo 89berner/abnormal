@@ -39,6 +39,7 @@ class Target:
         self.name    = name
         self.max_ips = options.n_proxies
         self.capture_on = options.capture_on
+        self.options = options
 
         self.possible_observers = []
         for ip in ip_list:
@@ -61,17 +62,18 @@ class Target:
         self.results = Result(name, urls)
 
         self.observers_vars   = AutoVivification()
-        self.observers_images = AutoVivification()
         self.processed        = AutoVivification()
         self.contourns = {}
+        self.observers_map = {}
 
     def process(self):
         
         #Get observers to use
         self.get_working_observers()
 
-        #Set the data based on the content and the screenshot
-        self.process_observers()
+        if (not self.options.no_source):
+            #Set the data based on the content and the screenshot
+            self.process_observers()
 
         #Check the difference between observers
         #populate missing_vars, diff_vars, missing_links, diff_images, diff_marked_images
@@ -92,7 +94,9 @@ class Target:
             queue.put(observer)
 
         queue.join()
-        self.observers = working_observers[:self.max_ips]
+        self.observers = working_observers #[:self.max_ips]
+        for observer in working_observers:
+            self.observers_map[observer.ip] = observer
         logging.info("Got %s working observers" % len(working_observers))
 
     def process_observers(self):
@@ -107,15 +111,16 @@ class Target:
             for observer1 in self.observers:
                 for observer2 in self.observers:
                     if (observer1.ip != observer2.ip):
-                        #what variables are missing or different
-                        self.check_vars(observer1,observer2,url)
-                        
+                        if (not self.options.no_source):
+                            #what variables are missing or different
+                            self.check_vars(observer1,observer2,url)
+
+                            #Find difference in links
+                            self.check_links(observer1,observer2,url)
+
                         #difference between screenshots                        
                         if self.capture_on:
                             self.check_screenshots(observer1,observer2,url)
-
-                        #Find difference in links
-                        self.check_links(observer1,observer2,url)
 
     def check_vars(self,observer1,observer2,url):
         logging.debug('Checking vars between %s-%s for %s' % (observer1.ip,observer2.ip,url))
@@ -140,7 +145,6 @@ class Target:
     def check_screenshots(self, observer1, observer2, url):
 
         if not self.get_processed(observer2,observer1,url,'screen'):
-            logging.debug('Comparing images between %s-%s for %s' % (observer1.ip,observer2.ip,url))
             image1 = observer1.read_image(url)
             image2 = observer2.read_image(url)
 
@@ -152,15 +156,13 @@ class Target:
 
             #If different
             if result is False:
-
-                self.observers_images[observer1.ip][url] = hashlib.md5(image1).hexdigest()
-                self.observers_images[observer2.ip][url] = hashlib.md5(image2).hexdigest()
+                logging.debug('Comparing images between %s-%s for %s' % (observer1.ip,observer2.ip,url))
 
                 #First set up different types of images to have them on their own
                 self.set_different_image(image1, url, observer1.get_image(url))
                 self.set_different_image(image2, url, observer2.get_image(url))
 
-                logging.debug('The images are different')
+                #logging.debug('The images are different')
                 filename_1 = "%s-%s-%s" % (observer1.ip, observer2.ip, url)
                 #cv2.imwrite("tmp/comp/%s.jpg" % Utils.as_filename(filename_1), difference_1)
                 #filename_2 = "%s-%s-%s" % (observer2.ip, observer1.ip, url)
@@ -175,9 +177,10 @@ class Target:
                 self.set_different_marked_image(contourn_image1,url,file_path)
 
             self.set_processed(observer1,observer2,url,'screen')
-            logging.debug("Finished comparing images..")
+            #logging.debug("Finished comparing images..")
         else:
-            logging.debug("Skipping comparison")
+            #logging.debug("Skipping comparison")
+            pass
     
     def check_links(self,observer1,observer2,url):
         links1 = observer1.get_address(url).links 
@@ -275,7 +278,7 @@ class Target:
     def check_img(self,md5):
         for observer in self.observers:
             for url in observer.urls:
-                if md5 in self.observers_images[observer.ip][url]:
+                if md5 == self.observers_map[observer.ip].get_address(url).image_hash:
                     return True
         return False
 
@@ -284,18 +287,19 @@ class Target:
         result = Set()
         for observer in self.observers:
             for url in observer.urls:
-                observer_md5 = self.observers_images[observer.ip][url]
+                observer_md5 = self.observers_map[observer.ip].get_address(url).image_hash
                 if observer_md5 == md5:
                     result.add((url,observer))
         return result
 
     def set_processed(self,observer1,observer2,url,m_type):
-        name = "%s-%s" % (observer1.ip, observer2.ip)
+        name = "%s-%s" % (observer1.get_address(url).image_hash, observer2.get_address(url).image_hash)
         self.processed[m_type][url][name] = 1
 
     def get_processed(self,observer1,observer2,url,m_type):
-        name = "%s-%s" % (observer1.ip, observer2.ip)
-        return self.processed[m_type][url][name]
+        name1 = "%s-%s" % (observer1.get_address(url).image_hash, observer2.get_address(url).image_hash)
+        name2 = "%s-%s" % (observer2.get_address(url).image_hash, observer1.get_address(url).image_hash)
+        return self.processed[m_type][url][name1] or self.processed[m_type][url][name2]
 
     def close(self):
         for observer in self.observers:

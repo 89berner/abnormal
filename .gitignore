@@ -8,3 +8,6 @@ tmp/screen/*
 tmp/uniq_comp/*
 tmp/comp_full/*
 get_proxies.py
+visitors.sh
+simple_start.sh
+open.js

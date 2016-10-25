@@ -40,10 +40,8 @@ parser.add_option("-x", "--no_source",
                   dest="no_source", default=0,
                   help="Avoid analysis of source code")
 
-
 (options, args) = parser.parse_args()
-
-if not options.url:   # if filename is not given
+if not options.url: 
     parser.error('A url was not given')
 
 #Set up logging

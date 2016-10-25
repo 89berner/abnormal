@@ -31,7 +31,10 @@ class Observer:
     def request(self):
         for url in self.urls:
             address = Address(url,self,self.options)
-            status = address.get_url(url)
+            if (not self.options.no_source):
+                status = address.get_url(url)
+            else:
+                status = 1
             if (status):
                 if (self.options.capture_on):
                     try:
